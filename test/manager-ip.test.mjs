@@ -1,0 +1,55 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createApp} from '../server.mjs';
+
+test('갤러리 매니저 양도·수정 접근·IP 저장·SQLite 관리',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'goa-manager-'));let app=await createApp({dataDir:dir,adminPassword:'manager-test-password',trustProxy:true,rateLimit:10000});
+ await new Promise(r=>app.server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${app.server.address().port}`;
+ const client=(ip='123.45.67.89')=>{let cookie='';return async(path,method='GET',body)=>{const r=await fetch(base+'/api'+path,{method,headers:{cookie,'content-type':'application/json','cf-connecting-ip':ip},body:body===undefined?undefined:JSON.stringify(body)});if(r.headers.get('set-cookie'))cookie=r.headers.get('set-cookie').split(';')[0];return {status:r.status,...await r.json()};};};
+ const admin=client(),a=client(),b=client(),guest=client(),v6=client('2001:db8:abcd::1');
+ try{
+  await admin('/admin/login','POST',{username:'community_admin',password:'manager-test-password'});
+  const first=await a('/auth/signup','POST',{username:'manager_a',nickname:'첫매니저',password:'test-member-pass'});
+  const second=await b('/auth/signup','POST',{username:'manager_b',nickname:'다음매니저',password:'test-member-pass'});
+  assert.equal((await guest('/galleries/1/manager','PUT',{username:'manager_a'})).status,403);
+  assert.equal((await admin('/galleries/1/manager','PUT',{username:'manager_a'})).status,200);
+  let boot=await a('/bootstrap');assert.equal(boot.isAdmin,false);assert.equal(boot.galleries[0].manager_id,first.user.id);assert.equal(boot.galleries[0].manager_nickname,'첫매니저');
+  assert.equal((await a('/admin/database')).status,401);
+  assert.equal((await a('/galleries/1/manage','PATCH',{name:'매니저 갤러리',description:'소개',icon:'💬'})).status,200);
+  const other=await admin('/admin/galleries','POST',{name:'다른 갤러리',description:'소개',icon:'💬'});
+  assert.equal((await a('/galleries/'+other.id+'/manage','PATCH',{name:'침범',description:'',icon:'💬'})).status,403);
+  const memberPost=await b('/posts','POST',{galleryId:1,title:'회원 글',content:'본문'});
+  assert.equal((await guest('/posts/'+memberPost.id+'/edit','POST',{})).status,403);
+  assert.equal((await a('/posts/'+memberPost.id+'/edit','POST',{})).status,403);
+  assert.equal((await b('/posts/'+memberPost.id+'/edit','POST',{})).status,200);
+  assert.equal((await a('/posts/'+memberPost.id,'PATCH',{pinned:true})).status,200);
+  assert.equal((await a('/posts/'+memberPost.id,'PATCH',{title:'변조',content:'변조'})).status,403);
+  assert.equal((await a('/galleries/1/manager','PUT',{username:'missing_user'})).status,404);
+  assert.equal((await a('/galleries/1/manager','PUT',{username:'manager_b'})).status,200);
+  assert.equal((await a('/galleries/1/manager','PUT',{username:'manager_a'})).status,403);
+  assert.equal((await a('/posts/'+memberPost.id,'DELETE',{})).status,403);
+  boot=await guest('/bootstrap');assert.equal(boot.galleries[0].manager_id,second.user.id);
+  const p=await guest('/posts','POST',{galleryId:1,title:'유동 글',content:'내용',nickname:'유동',password:'guest-pass',author_ip:'1.1.1.1'});
+  assert.equal(p.status,201);assert.equal(app.db.prepare('SELECT author_ip FROM posts WHERE id=?').get(p.id).author_ip,'123.45.67.89');
+  const detail=await guest('/posts/'+p.id);assert.equal(detail.post.ip_display,'123.045');assert.equal(Object.hasOwn(detail.post,'author_ip'),false);
+  assert.equal(JSON.stringify(await guest('/posts')).includes('123.45.67.89'),false);
+  assert.equal((await guest('/posts/'+p.id+'/edit','POST',{password:'wrong'})).status,403);
+  assert.equal((await guest('/posts/'+p.id+'/edit','POST',{password:'guest-pass'})).status,200);
+  const comment=await v6('/posts/'+p.id+'/comments','POST',{nickname:'유동댓글',content:'댓글',password:'guest-pass'});
+  assert.equal(app.db.prepare('SELECT author_ip FROM comments WHERE id=?').get(comment.id).author_ip,'2001:db8:abcd::1');
+  assert.equal((await guest('/posts/'+p.id)).comments[0].ip_display,'20010d');
+  const db=await admin('/admin/database?table=posts');assert.ok(db.columns.includes('user_id'));assert.ok(db.columns.includes('adult'));assert.ok(db.columns.includes('author_ip'));assert.equal(db.rows.find(row=>row.id===p.id).author_ip,'123.45.67.89');assert.equal(db.database.integrity,'ok');
+  assert.equal((await admin('/admin/database/posts/'+p.id,'PATCH',{pinned:true,adult:true})).status,200);
+  assert.equal((await admin('/admin/database/posts/'+p.id,'PATCH',{pinned:false,adult:false})).status,200);
+  assert.equal(app.db.prepare('SELECT pinned FROM posts WHERE id=?').get(p.id).pinned,0);
+  assert.equal((await b('/posts/'+p.id,'DELETE',{})).status,200);
+  app.db.prepare("UPDATE users SET status='blocked' WHERE id=?").run(second.user.id);
+  assert.equal((await b('/galleries/1/manage','PATCH',{name:'차단된 매니저',description:'',icon:'💬'})).status,403);
+  await new Promise(r=>app.server.close(r));app.db.close();app=await createApp({dataDir:dir});
+  assert.equal(app.db.prepare('SELECT manager_id FROM galleries WHERE id=1').get().manager_id,second.user.id);
+  assert.equal(app.db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');
+ }finally{if(app.server.listening)await new Promise(r=>app.server.close(r));app.db.close();await rm(dir,{recursive:true,force:true});}
+});

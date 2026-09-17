@@ -24,6 +24,8 @@ export async function openDatabase(dataDir,adminPassword){
  for(const table of ['posts','comments'])if(!db.prepare(`PRAGMA table_info(${table})`).all().some(c=>c.name==='user_id'))db.exec(`ALTER TABLE ${table} ADD COLUMN user_id INTEGER REFERENCES users(id)`);
  if(!db.prepare('PRAGMA table_info(posts)').all().some(c=>c.name==='adult'))db.exec('ALTER TABLE posts ADD COLUMN adult INTEGER NOT NULL DEFAULT 0');
  if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='is_owner'))db.exec('ALTER TABLE users ADD COLUMN is_owner INTEGER NOT NULL DEFAULT 0');
+ if(!db.prepare('PRAGMA table_info(galleries)').all().some(c=>c.name==='manager_id'))db.exec('ALTER TABLE galleries ADD COLUMN manager_id INTEGER REFERENCES users(id)');
+ for(const table of ['posts','comments'])if(!db.prepare(`PRAGMA table_info(${table})`).all().some(c=>c.name==='author_ip'))db.exec(`ALTER TABLE ${table} ADD COLUMN author_ip TEXT`);
  if(!db.prepare('SELECT value FROM settings WHERE key=?').get('adminHash')){
   const password=adminPassword||token().slice(0,24);const hash=await hashPassword(password);
   const defaults={name:'고아 커뮤니티',tagline:'경주정보고, 여기서 모이자.',description:'학교 이야기부터 게임, 일상, 아무 말까지. 경주정보고 친구들의 자유로운 공간.',accent:'#334b8e',announcement:'우리만의 작은 커뮤니티에 오신 걸 환영해요. 닉네임만 정하고 첫 이야기를 남겨보세요!',popularThreshold:3,adminHash:hash};
