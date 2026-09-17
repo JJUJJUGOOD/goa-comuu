@@ -21,6 +21,9 @@ export async function openDatabase(dataDir,adminPassword){
  `);
  const sessionColumns=db.prepare('PRAGMA table_info(sessions)').all().map(c=>c.name);
  if(!sessionColumns.includes('user_id'))db.exec('ALTER TABLE sessions ADD COLUMN user_id INTEGER REFERENCES users(id)');
+ for(const table of ['posts','comments'])if(!db.prepare(`PRAGMA table_info(${table})`).all().some(c=>c.name==='user_id'))db.exec(`ALTER TABLE ${table} ADD COLUMN user_id INTEGER REFERENCES users(id)`);
+ if(!db.prepare('PRAGMA table_info(posts)').all().some(c=>c.name==='adult'))db.exec('ALTER TABLE posts ADD COLUMN adult INTEGER NOT NULL DEFAULT 0');
+ if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='is_owner'))db.exec('ALTER TABLE users ADD COLUMN is_owner INTEGER NOT NULL DEFAULT 0');
  if(!db.prepare('SELECT value FROM settings WHERE key=?').get('adminHash')){
   const password=adminPassword||token().slice(0,24);const hash=await hashPassword(password);
   const defaults={name:'고아 커뮤니티',tagline:'경주정보고, 여기서 모이자.',description:'학교 이야기부터 게임, 일상, 아무 말까지. 경주정보고 친구들의 자유로운 공간.',accent:'#334b8e',announcement:'우리만의 작은 커뮤니티에 오신 걸 환영해요. 닉네임만 정하고 첫 이야기를 남겨보세요!',popularThreshold:3,adminHash:hash};
@@ -34,6 +37,14 @@ export async function openDatabase(dataDir,adminPassword){
    db.exec('COMMIT');
   }catch(e){db.exec('ROLLBACK');db.close();throw e;}
   await writeFile(join(dataDir,'owner-access.txt'),`고아 커뮤니티 관리자\n\n관리자 비밀번호: ${password}\n\n사이트 오른쪽 위 관리 메뉴에서 로그인하세요.\n이 파일과 data 폴더를 친구에게 공유하지 마세요.\n관리 화면에서 비밀번호를 바꾸면 이 초기 비밀번호는 사용할 수 없습니다.\n`,{mode:0o600});
+ }
+ if(!db.prepare('SELECT id FROM users WHERE is_owner=1').get()){
+  let username='community_admin';while(db.prepare('SELECT id FROM users WHERE username=?').get(username))username='admin_'+token().slice(0,12);
+  let nickname='사이트관리자';while(db.prepare('SELECT id FROM users WHERE nickname=?').get(nickname))nickname='관리자_'+token().slice(0,6);
+  const hash=JSON.parse(db.prepare("SELECT value FROM settings WHERE key='adminHash'").get().value);
+  db.prepare("INSERT INTO users(username,nickname,password_hash,role,is_owner) VALUES(?,?,?,'operator',1)").run(username,nickname,hash);
+  db.prepare('UPDATE sessions SET admin_until=0').run();
+  await writeFile(join(dataDir,'admin-account.txt'),`관리자 전용 아이디: ${username}\n비밀번호: 현재 관리자 비밀번호를 사용하세요. 최초 비밀번호는 owner-access.txt에 있습니다.\n이 파일은 공유하지 마세요.\n`,{mode:0o600});
  }
  // These IDs are the two original system notices, never reused (AUTOINCREMENT).
  // They are managed only through an authenticated administrator session.

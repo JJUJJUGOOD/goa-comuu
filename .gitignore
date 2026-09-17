@@ -2,3 +2,6 @@ data/
 runtime/
 *.log
 .env
+.env.*
+*.sqlite*
+PUBLIC-URL.txt

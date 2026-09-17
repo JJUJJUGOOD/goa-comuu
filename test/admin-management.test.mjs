@@ -12,7 +12,7 @@ test('운영자는 회원 상태·권한과 허용된 DB 필드를 관리한다'
   const signup=await api('/api/auth/signup','POST',{username:'member_1',nickname:'회원1',password:'member-secret-123',passwordConfirm:'member-secret-123'});assert.equal(signup.status,201);const userId=signup.body.user.id;
   await api('/api/auth/logout','POST');
   assert.equal((await api('/api/admin/users')).status,401);
-  assert.equal((await api('/api/admin/login','POST',{password:'admin-management-secret'})).status,200);
+  assert.equal((await api('/api/admin/login','POST',{username:'community_admin',password:'admin-management-secret'})).status,200);
   const users=await api('/api/admin/users');assert.equal(users.status,200);assert.ok(users.body.users.some(u=>u.id===userId&&u.nickname==='회원1'));assert.equal(users.body.users.some(u=>Object.hasOwn(u,'password_hash')),false);
   assert.equal((await api(`/api/admin/users/${userId}`,'PATCH',{status:'blocked'})).status,200);
   const loginJar={value:''};const loginApi=(path,method='GET',body)=>api(path,method,body,{get(){return loginJar.value;},set(v){loginJar.value=v;}});

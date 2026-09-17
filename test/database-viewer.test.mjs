@@ -10,7 +10,7 @@ test('database viewer is administrator-only, paginated, and excludes all credent
  await new Promise(r=>app.server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${app.server.address().port}`;
  t.after(async()=>{await new Promise(r=>app.server.close(r));app.db.close();await rm(dir,{recursive:true,force:true});});
  assert.equal((await fetch(base+'/api/admin/database')).status,401);
- const login=await fetch(base+'/api/admin/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:'viewer-admin-secret'})});const cookie=login.headers.getSetCookie()[0].split(';')[0];
+ const login=await fetch(base+'/api/admin/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'community_admin',password:'viewer-admin-secret'})});const cookie=login.headers.getSetCookie()[0].split(';')[0];
  const get=path=>fetch(base+path,{headers:{cookie}});
  const response=await get('/api/admin/database?table=posts');assert.equal(response.status,200);
  const data=await response.json();assert.equal(data.total,2);assert.equal(data.rows[0].id,2);assert.equal(data.tables.find(x=>x.name==='posts').count,2);assert.ok(data.columns.includes('content'));

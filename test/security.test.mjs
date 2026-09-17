@@ -29,15 +29,15 @@ test('attachment accepts PNG, rejects disguised files, and never serves secrets'
 });
 test('admin backup includes durable data and password change invalidates other sessions',async t=>{
  const {api,base}=await fixture(t);
- await api('/api/admin/login','POST',{password:'owner-password-test-123'});
- const old=await fetch(base+'/api/admin/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:'owner-password-test-123'})});const oldCookie=old.headers.getSetCookie()[0].split(';')[0];
+ await api('/api/admin/login','POST',{username:'community_admin',password:'owner-password-test-123'});
+ const old=await fetch(base+'/api/admin/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'community_admin',password:'owner-password-test-123'})});const oldCookie=old.headers.getSetCookie()[0].split(';')[0];
  const backup=await api('/api/admin/backup');assert.equal(backup.status,200);assert.equal(Buffer.from(await backup.arrayBuffer()).toString('ascii',0,15),'SQLite format 3');
  assert.equal((await api('/api/admin/password','PUT',{currentPassword:'wrong',newPassword:'changed-secret-123'})).status,403);
  assert.equal((await api('/api/admin/password','PUT',{currentPassword:'owner-password-test-123',newPassword:'changed-secret-123'})).status,200);
  const stale=await fetch(base+'/api/admin/backup',{headers:{cookie:oldCookie}});assert.equal(stale.status,401);
  await api('/api/admin/logout','POST',{});
- assert.equal((await api('/api/admin/login','POST',{password:'owner-password-test-123'})).status,401);
- assert.equal((await api('/api/admin/login','POST',{password:'changed-secret-123'})).status,200);
+ assert.equal((await api('/api/admin/login','POST',{username:'community_admin',password:'owner-password-test-123'})).status,401);
+ assert.equal((await api('/api/admin/login','POST',{username:'community_admin',password:'changed-secret-123'})).status,200);
 });
 test('rate limit applies to repeated writes without leaking password hashes',async t=>{
  const {api}=await fixture(t,{rateLimit:2});

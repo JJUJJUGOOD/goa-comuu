@@ -38,8 +38,8 @@ test('persistent community API and authorization boundaries', async () => {
    assert.equal((await api(`/api/comments/${comment.body.id}`,'DELETE',{password:'wrong'})).status,403);
    assert.equal((await api(`/api/posts/${id}/vote`,'POST',{})).body.votes,1);
    assert.equal((await api(`/api/posts/${id}/vote`,'POST',{})).status,409);
-   assert.equal((await api('/api/admin/login','POST',{password:'wrong'})).status,401);
-   assert.equal((await api('/api/admin/login','POST',{password:'test-owner-password-42'})).status,200);
+   assert.equal((await api('/api/admin/login','POST',{username:'community_admin',password:'wrong'})).status,401);
+   assert.equal((await api('/api/admin/login','POST',{username:'community_admin',password:'test-owner-password-42'})).status,200);
    const notice=await api('/api/posts','POST',{galleryId:gallery,title:'관리자 공지',content:'관리자만 작성할 수 있는 공지입니다.',nickname:'운영자',password:'notice-secret',pinned:true,category:'정보'});
    assert.equal(notice.status,201);
    assert.equal((await api(`/api/posts/${notice.body.id}`)).body.post.pinned,1);

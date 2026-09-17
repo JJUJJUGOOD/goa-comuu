@@ -8,7 +8,7 @@ import {token,fail,text,passwordValue,hashPassword,verifyPassword,body} from './
 
 const root=dirname(fileURLToPath(import.meta.url));
 const categories=['잡담','정보','질문','후기','모집'];
-const columns=`p.id,p.gallery_id,p.title,p.content,p.nickname,p.category,p.image,p.created_at,p.updated_at,p.pinned,p.views,g.name AS gallery_name,g.icon AS gallery_icon,(SELECT count(*) FROM comments WHERE post_id=p.id) AS comment_count,(SELECT count(*) FROM votes WHERE post_id=p.id) AS votes`;
+const columns=`p.id,p.user_id,p.adult,p.gallery_id,p.title,p.content,p.nickname,p.category,p.image,p.created_at,p.updated_at,p.pinned,p.views,g.name AS gallery_name,g.icon AS gallery_icon,(SELECT count(*) FROM comments WHERE post_id=p.id) AS comment_count,(SELECT count(*) FROM votes WHERE post_id=p.id) AS votes`;
 const from=' FROM posts p JOIN galleries g ON g.id=p.gallery_id';
 const publicUser=row=>row?{id:row.id,username:row.username,nickname:row.nickname,role:row.role}:null;
 const usernameValue=value=>{if(typeof value!=='string')fail(400,'아이디는 영문, 숫자, 밑줄로 4~24자 입력해 주세요.');const v=value.trim().toLowerCase();if(!/^[a-z0-9_]{4,24}$/.test(v))fail(400,'아이디는 영문, 숫자, 밑줄로 4~24자 입력해 주세요.');return v;};
@@ -48,7 +48,9 @@ export async function createApp({dataDir=process.env.DATA_DIR||join(root,'data')
    const isAdmin=session.admin_until>Date.now();const admin=()=>{if(!isAdmin)fail(401,'관리자 로그인이 필요합니다.');};
    const data=['POST','PUT','PATCH','DELETE'].includes(method)?await body(req):{};
    const getPost=id=>{const p=db.prepare('SELECT * FROM posts WHERE id=?').get(id);if(!p)fail(404,'게시글을 찾을 수 없습니다.');return p;};
-   const owner=async row=>{if(!isAdmin&&!await verifyPassword(data.password,row.password_hash))fail(403,'비밀번호가 올바르지 않습니다.');};
+   const owner=async row=>{if(isAdmin)return;if(row.user_id){if(user?.id!==row.user_id)fail(403,'작성자 계정으로 로그인해야 합니다.');return;}if(!await verifyPassword(data.password,row.password_hash))fail(403,'비밀번호가 올바르지 않습니다.');};
+   const author=()=>{if(user)return user.nickname;if(isAdmin)return '운영자';const nickname=text(data.nickname,'닉네임',20);if(nickname==='운영자'||db.prepare('SELECT 1 FROM users WHERE nickname=?').get(nickname))fail(400,'회원 또는 운영자 닉네임은 사용할 수 없습니다.');return nickname;};
+   const adultValue=v=>{if(v===undefined)return 0;if([true,1,'1','on'].includes(v))return 1;if([false,0,'0'].includes(v))return 0;fail(400,'올바른 성인 게시물 표시가 필요합니다.');};
    const category=v=>{if(!categories.includes(v))fail(400,'올바른 말머리를 선택해 주세요.');return v;};
    const galleries=()=>db.prepare('SELECT g.*,(SELECT count(*) FROM posts WHERE gallery_id=g.id) AS post_count FROM galleries g ORDER BY position,id').all();
    if(path==='/api/health'&&method==='GET')return send(200,{ok:true});
@@ -77,10 +79,10 @@ export async function createApp({dataDir=process.env.DATA_DIR||join(root,'data')
    }
    if(path==='/api/posts'&&method==='POST'){
     const galleryId=Number(data.galleryId);if(!db.prepare('SELECT id FROM galleries WHERE id=?').get(galleryId||0))fail(400,'갤러리를 선택해 주세요.');
-    const title=text(data.title,'제목',100),content=text(data.content,'내용',20000),nickname=text(data.nickname,'닉네임',20),cat=category(data.category||'잡담');
+    const title=text(data.title,'제목',100),content=text(data.content,'내용',20000),nickname=author(),cat=category(data.category||'잡담');
     if(!isAdmin&&nickname==='운영자')fail(400,'운영자 닉네임은 관리자만 사용할 수 있습니다.');
     if(data.pinned!==undefined&&!isAdmin)fail(403,'공지글은 관리자만 작성할 수 있습니다.');
-    const password=isAdmin&&(!data.password||typeof data.password!=='string'||!data.password.trim())?'':passwordValue(data.password);
+    const password=user||isAdmin?'':passwordValue(data.password);
     const pinned=isAdmin&&['1',1,true,'true','on'].includes(data.pinned)?1:0;
     let img=null;if(data.image){
      if(typeof data.image!=='string')fail(400,'올바른 이미지를 선택해 주세요.');const match=/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(data.image);if(!match)fail(400,'PNG, JPG, WebP 이미지만 첨부할 수 있습니다.');
@@ -88,37 +90,39 @@ export async function createApp({dataDir=process.env.DATA_DIR||join(root,'data')
      const valid=match[1]==='png'?bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):match[1]==='jpeg'?bytes[0]===255&&bytes[1]===216&&bytes[2]===255:bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP';
      if(!valid)fail(400,'올바른 이미지 파일이 아닙니다.');img=token()+'.'+(match[1]==='jpeg'?'jpg':match[1]);await writeFile(join(dataDir,'uploads',img),bytes);
     }
-    const hash=password?await hashPassword(password):'';const result=db.prepare('INSERT INTO posts(gallery_id,title,content,nickname,password_hash,category,image,pinned) VALUES(?,?,?,?,?,?,?,?)').run(galleryId,title,content,nickname,hash,cat,img?'/uploads/'+img:null,pinned);
+    const hash=password?await hashPassword(password):'';const result=db.prepare('INSERT INTO posts(gallery_id,title,content,nickname,password_hash,category,image,pinned,user_id,adult) VALUES(?,?,?,?,?,?,?,?,?,?)').run(galleryId,title,content,nickname,hash,cat,img?'/uploads/'+img:null,pinned,user?.id??null,adultValue(data.adult));
     return send(201,{id:Number(result.lastInsertRowid)});
    }
    let match=/^\/api\/posts\/(\d+)$/.exec(path);
    if(match){const id=Number(match[1]);const post=getPost(id);
     if(method==='GET'){
      if(db.prepare('INSERT OR IGNORE INTO views(post_id,visitor) VALUES(?,?)').run(id,sid).changes)db.prepare('UPDATE posts SET views=views+1 WHERE id=?').run(id);
-     return send(200,{post:db.prepare('SELECT '+columns+from+' WHERE p.id=?').get(id),comments:db.prepare('SELECT id,nickname,content,created_at FROM comments WHERE post_id=? ORDER BY id').all(id),voted:!!db.prepare('SELECT 1 FROM votes WHERE post_id=? AND visitor=?').get(id,sid)});
+     return send(200,{post:db.prepare('SELECT '+columns+from+' WHERE p.id=?').get(id),comments:db.prepare('SELECT id,user_id,nickname,content,created_at FROM comments WHERE post_id=? ORDER BY id').all(id),voted:!!db.prepare('SELECT 1 FROM votes WHERE post_id=? AND visitor=?').get(id,sid)});
     }
-    if(method==='PATCH'){await owner(post);if(data.pinned!==undefined){admin();db.prepare('UPDATE posts SET pinned=? WHERE id=?').run(data.pinned?1:0,id);}else{db.prepare("UPDATE posts SET title=?,content=?,category=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").run(text(data.title,'제목',100),text(data.content,'내용',20000),category(data.category||post.category),id);}return send(200,{ok:true});}
+    if(method==='PATCH'){await owner(post);if(data.pinned!==undefined){admin();db.prepare('UPDATE posts SET pinned=? WHERE id=?').run(data.pinned?1:0,id);}else{db.prepare("UPDATE posts SET title=?,content=?,category=?,adult=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").run(text(data.title,'제목',100),text(data.content,'내용',20000),category(data.category||post.category),data.adult===undefined?post.adult:adultValue(data.adult),id);}return send(200,{ok:true});}
     if(method==='DELETE'){await owner(post);db.prepare('DELETE FROM posts WHERE id=?').run(id);if(post.image)await unlink(join(dataDir,'uploads',post.image.split('/').at(-1))).catch(()=>{});return send(200,{ok:true});}
    }
    match=/^\/api\/posts\/(\d+)\/(comments|vote)$/.exec(path);
    if(match&&method==='POST'){const id=Number(match[1]);getPost(id);
     if(match[2]==='vote'){const result=db.prepare('INSERT OR IGNORE INTO votes(post_id,visitor) VALUES(?,?)').run(id,sid);if(!result.changes)fail(409,'이미 추천한 글입니다.');return send(200,{votes:db.prepare('SELECT count(*) AS n FROM votes WHERE post_id=?').get(id).n});}
-    const nickname=text(data.nickname,'닉네임',20),content=text(data.content,'댓글',2000),password=passwordValue(data.password);const hash=await hashPassword(password);
-    const result=db.prepare('INSERT INTO comments(post_id,nickname,content,password_hash) VALUES(?,?,?,?)').run(id,nickname,content,hash);return send(201,{id:Number(result.lastInsertRowid)});
+    const nickname=author(),content=text(data.content,'댓글',2000),password=user||isAdmin?'':passwordValue(data.password);const hash=password?await hashPassword(password):'';
+    const result=db.prepare('INSERT INTO comments(post_id,nickname,content,password_hash,user_id) VALUES(?,?,?,?,?)').run(id,nickname,content,hash,user?.id??null);return send(201,{id:Number(result.lastInsertRowid)});
    }
    match=/^\/api\/comments\/(\d+)$/.exec(path);if(match&&method==='DELETE'){const c=db.prepare('SELECT * FROM comments WHERE id=?').get(Number(match[1]));if(!c)fail(404,'댓글을 찾을 수 없습니다.');await owner(c);db.prepare('DELETE FROM comments WHERE id=?').run(c.id);return send(200,{ok:true});}
    if(path==='/api/admin/login'&&method==='POST'){
-    limited('login:'+ip,10);const hash=JSON.parse(db.prepare('SELECT value FROM settings WHERE key=?').get('adminHash').value);if(!await verifyPassword(data.password,hash))fail(401,'관리자 비밀번호가 올바르지 않습니다.');
-    const newId=token();db.prepare('INSERT INTO sessions(id,expires,admin_until) VALUES(?,?,?)').run(newId,Date.now()+30*86400000,Date.now()+8*3600000);db.prepare('DELETE FROM sessions WHERE id=?').run(sid);cookie(newId);return send(200,{ok:true});
+    limited('login:'+ip,10);const row=typeof data.username==='string'?db.prepare("SELECT * FROM users WHERE username=? AND role='operator' AND status='active'").get(data.username.trim().toLowerCase()):null;if(!row||!await verifyPassword(data.password,row.password_hash))fail(401,'관리자 아이디 또는 비밀번호가 올바르지 않습니다.');
+    const newId=token();db.prepare('INSERT INTO sessions(id,expires,admin_until,user_id) VALUES(?,?,?,?)').run(newId,Date.now()+30*86400000,Date.now()+8*3600000,row.id);db.prepare('DELETE FROM sessions WHERE id=?').run(sid);cookie(newId);return send(200,{ok:true});
    }
-   if(path==='/api/admin/logout'&&method==='POST'){db.prepare('UPDATE sessions SET admin_until=0 WHERE id=?').run(sid);return send(200,{ok:true});}
+   if(path==='/api/admin/logout'&&method==='POST'){db.prepare('UPDATE sessions SET admin_until=0,user_id=NULL WHERE id=?').run(sid);return send(200,{ok:true});}
    if(path.startsWith('/api/admin/')){admin();
     if(path==='/api/admin/users'&&method==='GET')return send(200,{users:db.prepare('SELECT id,username,nickname,role,status,created_at,last_login FROM users ORDER BY id DESC').all().map(publicUserRow=>({...publicUserRow}))});
     const userMatch=/^\/api\/admin\/users\/(\d+)$/.exec(path);if(userMatch&&method==='PATCH'){
      const id=Number(userMatch[1]),row=db.prepare('SELECT id,username,nickname,role,status,created_at,last_login FROM users WHERE id=?').get(id);if(!row)fail(404,'회원을 찾을 수 없습니다.');
      const nickname=data.nickname===undefined?row.nickname:text(data.nickname,'닉네임',20),role=data.role===undefined?row.role:data.role,status=data.status===undefined?row.status:data.status;
      if(!['user','operator'].includes(role))fail(400,'올바른 권한을 선택해 주세요.');if(!['active','blocked'].includes(status))fail(400,'올바른 회원 상태를 선택해 주세요.');if(nickname==='운영자'&&role!=='operator')fail(400,'운영자 닉네임은 운영자 권한에서만 사용할 수 있습니다.');
+     if(db.prepare('SELECT is_owner FROM users WHERE id=?').get(id).is_owner&&(role!=='operator'||status!=='active'))fail(400,'전용 관리자 계정은 차단하거나 권한을 내릴 수 없습니다.');
      try{db.prepare('UPDATE users SET nickname=?,role=?,status=? WHERE id=?').run(nickname,role,status,id);}catch(e){if(String(e.message).includes('UNIQUE'))fail(409,'이미 사용 중인 닉네임입니다.');throw e;}
+     if(role!==row.role)db.prepare('UPDATE sessions SET admin_until=0 WHERE user_id=?').run(id);
      if(status==='blocked')db.prepare('UPDATE sessions SET user_id=NULL,admin_until=0 WHERE user_id=?').run(id);
      return send(200,{user:publicUser(db.prepare('SELECT id,username,nickname,role,status,created_at,last_login FROM users WHERE id=?').get(id))});
     }
@@ -160,8 +164,8 @@ export async function createApp({dataDir=process.env.DATA_DIR||join(root,'data')
      db.exec('BEGIN');try{const s=db.prepare('UPDATE settings SET value=? WHERE key=?');for(const[k,v]of Object.entries(next))s.run(JSON.stringify(v),k);db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}return send(200,{settings:next});
     }
     if(path==='/api/admin/password'&&method==='PUT'){
-     const old=JSON.parse(db.prepare('SELECT value FROM settings WHERE key=?').get('adminHash').value);if(!await verifyPassword(data.currentPassword,old))fail(403,'현재 비밀번호가 올바르지 않습니다.');const fresh=passwordValue(data.newPassword,12);
-     db.prepare('UPDATE settings SET value=? WHERE key=?').run(JSON.stringify(await hashPassword(fresh)),'adminHash');db.prepare('UPDATE sessions SET admin_until=0 WHERE id<>?').run(sid);return send(200,{ok:true});
+     const account=db.prepare('SELECT * FROM users WHERE id=?').get(user?.id);if(!account||!await verifyPassword(data.currentPassword,account.password_hash))fail(403,'현재 비밀번호가 올바르지 않습니다.');const fresh=await hashPassword(passwordValue(data.newPassword,12));
+     db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(fresh,account.id);if(account.is_owner)db.prepare('UPDATE settings SET value=? WHERE key=?').run(JSON.stringify(fresh),'adminHash');db.prepare('DELETE FROM sessions WHERE user_id=? AND id<>?').run(account.id,sid);return send(200,{ok:true});
     }
     if(path==='/api/admin/backup'&&method==='GET'){const dest=join(dataDir,'backup-'+token()+'.sqlite');try{await backup(db,dest);const bytes=await readFile(dest);res.writeHead(200,{'Content-Type':'application/vnd.sqlite3','Content-Disposition':'attachment; filename="moa-backup.sqlite"','Cache-Control':'no-store'});res.end(bytes);}finally{await unlink(dest).catch(()=>{});}return;}
     if(path==='/api/admin/galleries'&&method==='POST'){if(galleries().length>=30)fail(400,'갤러리는 최대 30개까지 만들 수 있습니다.');const r=db.prepare('INSERT INTO galleries(name,description,icon,position) VALUES(?,?,?,?)').run(text(data.name,'갤러리 이름',30),text(data.description,'소개',120,0),text(data.icon||'💬','아이콘',8),galleries().length);return send(201,{id:Number(r.lastInsertRowid)});}
