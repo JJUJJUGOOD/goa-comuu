@@ -10,7 +10,7 @@ import {clientIP,publicAuthor} from './network.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const categories=['잡담','정보','질문','후기','모집'];
-const columns=`p.id,p.user_id,p.adult,p.author_ip,p.gallery_id,p.title,p.content,p.nickname,p.category,p.image,p.created_at,p.updated_at,p.pinned,p.views,g.name AS gallery_name,g.icon AS gallery_icon,(SELECT count(*) FROM comments WHERE post_id=p.id) AS comment_count,(SELECT count(*) FROM votes WHERE post_id=p.id) AS votes`;
+const columns=`p.id,p.user_id,p.adult,p.author_ip,p.gallery_id,p.title,p.content,p.nickname,p.category,p.image,p.created_at,p.updated_at,p.pinned,p.views,g.name AS gallery_name,g.icon AS gallery_icon,(SELECT count(*) FROM comments WHERE post_id=p.id) AS comment_count,(SELECT count(*) FROM votes WHERE post_id=p.id) AS votes,(SELECT count(*) FROM downvotes WHERE post_id=p.id) AS downvotes`;
 const from=' FROM posts p JOIN galleries g ON g.id=p.gallery_id';
 const publicUser=row=>row?{id:row.id,username:row.username,nickname:row.nickname,role:row.role}:null;
 const usernameValue=value=>{if(typeof value!=='string')fail(400,'아이디는 영문, 숫자, 밑줄로 4~24자 입력해 주세요.');const v=value.trim().toLowerCase();if(!/^[a-z0-9_]{4,24}$/.test(v))fail(400,'아이디는 영문, 숫자, 밑줄로 4~24자 입력해 주세요.');return v;};
@@ -120,14 +120,15 @@ export async function createApp({dataDir=process.env.DATA_DIR||join(root,'data')
    if(match){const id=Number(match[1]);const post=getPost(id);
     if(method==='GET'){
      if(db.prepare('INSERT OR IGNORE INTO views(post_id,visitor) VALUES(?,?)').run(id,sid).changes)db.prepare('UPDATE posts SET views=views+1 WHERE id=?').run(id);
-     return send(200,{post:publicAuthor(db.prepare('SELECT '+columns+from+' WHERE p.id=?').get(id)),comments:db.prepare('SELECT id,user_id,author_ip,nickname,content,created_at FROM comments WHERE post_id=? ORDER BY id').all(id).map(publicAuthor),voted:!!db.prepare('SELECT 1 FROM votes WHERE post_id=? AND visitor=?').get(id,sid)});
+     return send(200,{post:publicAuthor(db.prepare('SELECT '+columns+from+' WHERE p.id=?').get(id)),comments:db.prepare('SELECT id,user_id,author_ip,nickname,content,created_at FROM comments WHERE post_id=? ORDER BY id').all(id).map(publicAuthor),voted:!!db.prepare('SELECT 1 FROM votes WHERE post_id=? AND visitor=?').get(id,sid),downvoted:!!db.prepare('SELECT 1 FROM downvotes WHERE post_id=? AND visitor=?').get(id,sid)});
     }
     if(method==='PATCH'){if(data.pinned!==undefined){if(!manages(post.gallery_id))fail(403,'갤러리 관리 권한이 필요합니다.');db.prepare('UPDATE posts SET pinned=? WHERE id=?').run(data.pinned?1:0,id);}else{await owner(post);db.prepare("UPDATE posts SET title=?,content=?,category=?,adult=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").run(text(data.title,'제목',100),text(data.content,'내용',20000),category(data.category||post.category),data.adult===undefined?post.adult:adultValue(data.adult),id);}return send(200,{ok:true});}
     if(method==='DELETE'){if(!manages(post.gallery_id))await owner(post);db.prepare('DELETE FROM posts WHERE id=?').run(id);if(post.image)await unlink(join(dataDir,'uploads',post.image.split('/').at(-1))).catch(()=>{});return send(200,{ok:true});}
    }
-   match=/^\/api\/posts\/(\d+)\/(comments|vote)$/.exec(path);
+   match=/^\/api\/posts\/(\d+)\/(comments|vote|downvote)$/.exec(path);
    if(match&&method==='POST'){const id=Number(match[1]);getPost(id);
     if(match[2]==='vote'){const result=db.prepare('INSERT OR IGNORE INTO votes(post_id,visitor) VALUES(?,?)').run(id,sid);if(!result.changes)fail(409,'이미 추천한 글입니다.');return send(200,{votes:db.prepare('SELECT count(*) AS n FROM votes WHERE post_id=?').get(id).n});}
+    if(match[2]==='downvote'){const result=db.prepare('INSERT OR IGNORE INTO downvotes(post_id,visitor) VALUES(?,?)').run(id,sid);if(!result.changes)fail(409,'이미 비추한 글입니다.');return send(200,{downvotes:db.prepare('SELECT count(*) AS n FROM downvotes WHERE post_id=?').get(id).n});}
     const nickname=author(),content=text(data.content,'댓글',2000),password=user||isAdmin?'':passwordValue(data.password);const hash=password?await hashPassword(password):'';
     const result=db.prepare('INSERT INTO comments(post_id,nickname,content,password_hash,user_id,author_ip) VALUES(?,?,?,?,?,?)').run(id,nickname,content,hash,user?.id??null,user?null:ip);return send(201,{id:Number(result.lastInsertRowid)});
    }

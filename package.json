@@ -1,1 +1,1 @@
-{"name":"moa-community","version":"1.0.0","private":true,"type":"module","engines":{"node":">=24.0.0"},"scripts":{"start":"node server.mjs","test":"node --test test/*.test.mjs"}}
+{"name":"moa-community","version":"1.0.0","private":true,"type":"module","engines":{"node":">=24.0.0"},"scripts":{"start":"node server.mjs","check":"node --check server.mjs && node --check db.mjs && node --check network.mjs && node --check security.mjs && node --check public/app.js","test":"node --test test/*.test.mjs"}}

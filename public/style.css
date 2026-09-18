@@ -25,3 +25,56 @@
 .popular-mark{display:inline-block;padding:2px 5px;margin-right:5px;border:1px solid #334b8e;color:#334b8e;background:#edf1fb;font-size:11px;font-weight:700;vertical-align:middle;white-space:nowrap}
 .popular-banner{display:flex;align-items:center;gap:15px;border-top:2px solid #334b8e;border-bottom:1px solid #dce2ef;background:#f4f6fb;padding:16px 14px;margin-top:16px;color:#334b8e}.popular-banner strong{font-size:20px;white-space:nowrap}.popular-banner span{font-size:12px}.editor-mode{font-size:12px;color:#777;padding:8px}
 .ip-display{font-size:11px;color:#777;white-space:nowrap;font-weight:normal}.writer{min-width:110px}.manager-form p{line-height:1.6}.database-table td{vertical-align:top}.database-table th{white-space:nowrap}.database-table details div{white-space:pre-wrap;overflow-wrap:anywhere;max-width:420px}.database-info span{display:block}.database-scroll{max-width:100%;overflow:auto}
+
+/* Gallery article view and independent recommendation controls. */
+.post-columns .post-detail{min-width:0;padding-top:0;border-top:0}
+.post-columns .post-gallery-bar h1{margin-bottom:0}
+.post-columns .post-gallery-bar{border-bottom:2px solid var(--accent);padding:0 0 12px;min-height:46px}
+.post-title-area{padding:17px 3px 14px;border-bottom:1px solid #eee}
+.post-title-area h2{font-size:14px;line-height:1.7}
+.detail-category{font-weight:400;color:#666;margin-right:3px}
+.post-meta-line{color:#555;margin-top:5px;flex-wrap:wrap;row-gap:5px}
+.post-meta-line .post-stats{display:flex;gap:8px;align-items:center;color:#555}
+.post-stats b{font-weight:400}
+.post-detail>.post-body{min-height:300px;padding:30px 3px 45px;line-height:1.9}
+.reaction-box{width:326px;max-width:100%;margin:42px auto 0;border:1px solid #d6d6d6;border-radius:2px;background:#fff}
+.reaction-main{display:flex;align-items:center;justify-content:center;gap:10px;min-height:90px;padding:16px 12px}
+.reaction-count{min-width:44px;max-width:90px;overflow-wrap:anywhere;text-align:center;font-size:15px;color:#555;font-variant-numeric:tabular-nums}
+.reaction-count.recommend-count{color:#cf302c}
+.reaction-button{width:58px;height:58px;border-radius:50%;flex:none;padding:7px 0 5px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:0;color:#fff;border:1px solid #ffffff55;transition:background .15s,transform .15s}
+.reaction-button svg{width:29px;height:29px;fill:currentColor}
+.reaction-button span{font-size:11px;font-weight:700;line-height:15px}
+.reaction-button.recommend{background:var(--accent)}
+.reaction-button.dislike{background:#999}
+.reaction-button:hover:not(:disabled){filter:brightness(.9);transform:translateY(-2px)}
+.reaction-button:disabled{opacity:1;cursor:default}
+.reaction-button.voted{box-shadow:0 0 0 3px #fff,0 0 0 5px #d4d8e4}
+.reaction-button.dislike.voted{box-shadow:0 0 0 3px #fff,0 0 0 5px #ddd}
+.reaction-tools{display:flex;min-height:35px;border-top:1px solid #d6d6d6;background:#fafafa}
+.reaction-tools button{display:flex;align-items:center;justify-content:center;gap:5px;flex:1;padding:8px;color:#777;font-size:11px}
+.reaction-tools button+button{border-left:1px solid #d6d6d6}
+.reaction-tools button:hover{background:#eee}
+.reaction-tools .icon{width:15px;height:15px;color:#999}
+.reaction-tools b{font-weight:400}
+.reaction-hint{text-align:center;color:#999;font-size:10px;margin:12px 0 35px}
+.post-action-strip.post-manage{justify-content:flex-end;border-top:0;border-bottom:1px solid #ddd;min-height:35px}
+.post-action-strip.post-manage:empty{padding:0;min-height:0}
+.post-columns .comments{padding-top:14px}
+.post-columns .comments-heading{border-bottom:2px solid var(--accent)}
+@media(max-width:660px){
+ .post-columns .post-gallery-bar{gap:8px;padding-bottom:10px}
+ .post-title-area h2{font-size:15px}
+ .post-meta-line .post-stats{width:auto;margin-left:0;gap:6px}
+ .post-meta-line>time{flex:1;min-width:170px}
+ .post-detail>.post-body{min-height:240px;padding:26px 2px 35px;font-size:14px}
+ .reaction-box{margin-top:24px}
+ .reaction-main{gap:8px}
+ .reaction-hint{margin-bottom:25px}
+ .post-columns .comments-heading{gap:8px}
+ .post-columns .comment-tools{margin-left:0;width:100%;justify-content:flex-end}
+ .post-columns .comments>.comment{grid-template-columns:minmax(0,1fr) auto 18px;gap:4px 8px}
+ .post-columns .comment-author{grid-column:1;grid-row:1}
+ .post-columns .comments>.comment>time{grid-column:2;grid-row:1}
+ .post-columns .comments>.comment>.icon-button{grid-column:3;grid-row:1}
+ .post-columns .comments>.comment>p{grid-column:1/-1;grid-row:2;font-size:12px;padding-top:3px}
+}

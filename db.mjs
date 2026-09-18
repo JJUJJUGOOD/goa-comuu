@@ -14,6 +14,7 @@ export async function openDatabase(dataDir,adminPassword){
  CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT NOT NULL COLLATE NOCASE UNIQUE,nickname TEXT NOT NULL COLLATE NOCASE UNIQUE,password_hash TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','operator')),status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','blocked')),created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),last_login TEXT);
  CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,admin_until INTEGER NOT NULL DEFAULT 0,user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,expires INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS votes(post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,visitor TEXT NOT NULL,PRIMARY KEY(post_id,visitor));
+ CREATE TABLE IF NOT EXISTS downvotes(post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,visitor TEXT NOT NULL,PRIMARY KEY(post_id,visitor));
  CREATE TABLE IF NOT EXISTS views(post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,visitor TEXT NOT NULL,PRIMARY KEY(post_id,visitor));
  CREATE INDEX IF NOT EXISTS idx_posts_gallery ON posts(gallery_id,id DESC);
  CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id);
